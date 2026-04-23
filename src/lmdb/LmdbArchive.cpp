@@ -19,8 +19,15 @@ bool LmdbArchive::create(const QString& sourceFolder, const QString& archivePath
                           ProgressCallback progress, std::atomic<bool>* cancelFlag) {
     close();
 
+    // Acquire write lock on .lmdb file
+    if (!archiveLock_.lockForWrite(archivePath)) {
+        lastError_ = archiveLock_.lastError();
+        return false;
+    }
+
     if (!env_.open(archivePath, false)) {
         lastError_ = env_.lastError();
+        archiveLock_.unlock();
         return false;
     }
     writeMode_ = true;
@@ -116,8 +123,23 @@ bool LmdbArchive::open(const QString& archivePath, OpenMode mode) {
     close();
 
     bool readOnly = (mode == OpenMode::ReadOnly);
+
+    // Acquire file lock
+    if (readOnly) {
+        if (!archiveLock_.lockForRead(archivePath)) {
+            lastError_ = archiveLock_.lastError();
+            return false;
+        }
+    } else {
+        if (!archiveLock_.lockForWrite(archivePath)) {
+            lastError_ = archiveLock_.lastError();
+            return false;
+        }
+    }
+
     if (!env_.open(archivePath, readOnly)) {
         lastError_ = env_.lastError();
+        archiveLock_.unlock();
         return false;
     }
     writeMode_ = !readOnly;
@@ -158,6 +180,7 @@ void LmdbArchive::close() {
         manifest_ = {};
         env_.close();
     }
+    archiveLock_.unlock();
 }
 
 bool LmdbArchive::isOpen() const {

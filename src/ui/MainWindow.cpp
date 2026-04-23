@@ -268,9 +268,9 @@ void MainWindow::onVerifyComplete(const VerifyReport& report) {
 }
 
 void MainWindow::openArchive() {
-    QString path = QFileDialog::getExistingDirectory(this,
+    QString path = QFileDialog::getOpenFileName(this,
         tr("Open LMDB Archive"), {},
-        QFileDialog::ShowDirsOnly);
+        tr("LMDB Archives (*.lmdb);;All Files (*)"));
     if (!path.isEmpty()) {
         controller_->openArchive(path);
     }
@@ -283,8 +283,12 @@ void MainWindow::createArchive() {
 
     QString archivePath = QFileDialog::getSaveFileName(this,
         tr("Create Archive"), {},
-        tr("LMDB Archive (*.lmdb)"));
+        tr("LMDB Archives (*.lmdb)"));
     if (archivePath.isEmpty()) return;
+
+    // Ensure .lmdb extension
+    if (!archivePath.endsWith(QStringLiteral(".lmdb"), Qt::CaseInsensitive))
+        archivePath += QStringLiteral(".lmdb");
 
     ProgressDialog dlg(tr("Creating Archive"), this);
     dlg.show();

@@ -1,5 +1,6 @@
 #pragma once
 #include "core/ArchiveTypes.h"
+#include "core/ArchiveLock.h"
 #include "lmdb/LmdbEnv.h"
 #include <QString>
 #include <QByteArray>
@@ -80,6 +81,7 @@ private:
     void ensureManifest(MDB_txn* txn, MDB_dbi manifestDbi);
 
     LmdbEnv env_;
+    ArchiveLock archiveLock_;
     MDB_dbi entriesDbi_ = 0;
     MDB_dbi metaDbi_ = 0;
     MDB_dbi manifestDbi_ = 0;

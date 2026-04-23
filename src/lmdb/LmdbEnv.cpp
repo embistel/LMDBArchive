@@ -11,14 +11,6 @@ LmdbEnv::~LmdbEnv() {
 bool LmdbEnv::open(const QString& path, bool readOnly, size_t mapSize, int maxDbs) {
     if (env_) close();
 
-    QDir dir(path);
-    if (!readOnly) {
-        if (!dir.mkpath(QLatin1String("."))) {
-            lastError_ = QStringLiteral("Cannot create directory: ") + path;
-            return false;
-        }
-    }
-
     int rc = mdb_env_create(&env_);
     if (rc != MDB_SUCCESS) {
         lastError_ = QStringLiteral("mdb_env_create failed: ") + QString::fromLatin1(mdb_strerror(rc));
@@ -42,7 +34,12 @@ bool LmdbEnv::open(const QString& path, bool readOnly, size_t mapSize, int maxDb
         return false;
     }
 
-    unsigned int flags = readOnly ? MDB_RDONLY : 0;
+    // Single File Archive Mode: MDB_NOSUBDIR | MDB_NOLOCK
+    // path is a .lmdb file, not a directory.
+    // MDB_NOSUBDIR = use path as data file directly
+    // MDB_NOLOCK = no sidecar lock file; application manages concurrency
+    unsigned int flags = MDB_NOSUBDIR | MDB_NOLOCK;
+    if (readOnly) flags |= MDB_RDONLY;
     rc = mdb_env_open(env_, path.toUtf8().constData(), flags, 0664);
     if (rc != MDB_SUCCESS) {
         lastError_ = QStringLiteral("mdb_env_open failed: ") + QString::fromLatin1(mdb_strerror(rc));
@@ -54,7 +51,7 @@ bool LmdbEnv::open(const QString& path, bool readOnly, size_t mapSize, int maxDb
     path_ = path;
     mapSize_ = mapSize;
     readOnly_ = readOnly;
-    spdlog::info("LMDB environment opened: {} (readonly={})", path.toStdString(), readOnly);
+    spdlog::info("LMDB environment opened: {} (readonly={}, single-file mode)", path.toStdString(), readOnly);
     return true;
 }
 

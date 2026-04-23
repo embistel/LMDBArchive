@@ -24,6 +24,7 @@ add_library(lmdb_archive_core STATIC
     src/core/FileSystemUtil.cpp
     src/core/HashUtil.cpp
     src/core/MetaCodec.cpp
+    src/core/ArchiveLock.cpp
     src/lmdb/LmdbEnv.cpp
     src/lmdb/LmdbArchive.cpp
     src/model/ArchiveTreeNode.cpp
@@ -92,6 +93,7 @@ add_executable(lmdb_archive_tests
     tests/test_archive_roundtrip.cpp
     tests/test_treebuilder.cpp
     tests/test_verify.cpp
+    tests/test_single_file_mode.cpp
 )
 
 target_link_libraries(lmdb_archive_tests PRIVATE
@@ -104,3 +106,4 @@ add_test(NAME test_pathutil COMMAND lmdb_archive_tests "[path]")
 add_test(NAME test_archive COMMAND lmdb_archive_tests "[archive]")
 add_test(NAME test_tree COMMAND lmdb_archive_tests "[tree]")
 add_test(NAME test_verify COMMAND lmdb_archive_tests "[verify]")
+add_test(NAME test_single_file COMMAND lmdb_archive_tests "[single-file]")
