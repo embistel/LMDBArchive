@@ -65,6 +65,7 @@ set_target_properties(lmdb-archive-cli PROPERTIES OUTPUT_NAME "lmdb-archive")
 add_executable(lmdb-archive-gui
     src/app/main.cpp
     src/app/AppController.cpp
+    src/app/ShellIntegration.cpp
     src/ui/MainWindow.cpp
     src/ui/PreviewPane.cpp
     src/ui/ExtractDialog.cpp

@@ -15,6 +15,7 @@ public:
     static int add(LmdbArchive& archive, const QStringList& args);
     static int del(LmdbArchive& archive, const QStringList& args);
     static int cat(LmdbArchive& archive, const QStringList& args);
+    static int search(LmdbArchive& archive, const QStringList& args);
 
     static void printUsage();
 };

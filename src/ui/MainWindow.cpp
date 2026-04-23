@@ -23,11 +23,18 @@
 #include <QMenu>
 #include <QApplication>
 #include <QClipboard>
+#include <QDragEnterEvent>
+#include <QMimeData>
+#include <QUrl>
+#include <QListWidget>
+#include <QListWidgetItem>
+#include <QTimer>
 
 MainWindow::MainWindow(AppController* controller, QWidget* parent)
     : QMainWindow(parent), controller_(controller) {
     setWindowTitle(QStringLiteral("LMDB Archive"));
     resize(1100, 700);
+    setAcceptDrops(true);
 
     folderModel_ = new FolderTreeModel(this);
     entryModel_ = new EntryTableModel(this);
@@ -71,6 +78,10 @@ void MainWindow::setupMenus() {
         // Already in details mode with QTableView
     });
     viewMenu->addSeparator();
+    actSearch_ = viewMenu->addAction(tr("&Search Panel"));
+    actSearch_->setCheckable(true);
+    actSearch_->setShortcut(tr("Ctrl+F"));
+    viewMenu->addSeparator();
     viewMenu->addAction(toolbar_->toggleViewAction());
 
     // Tools menu
@@ -103,6 +114,8 @@ void MainWindow::setupToolbar() {
     actUp_ = toolbar_->addAction(tr("Up"));
     actRefresh_ = toolbar_->addAction(tr("Refresh"));
     actVerify_ = toolbar_->addAction(tr("Verify"));
+    toolbar_->addSeparator();
+    actSearch_ = toolbar_->addAction(tr("Search"));
 }
 
 void MainWindow::setupCentralWidget() {
@@ -142,6 +155,24 @@ void MainWindow::setupCentralWidget() {
     mainSplitter_->setStretchFactor(0, 1);
     mainSplitter_->setStretchFactor(1, 3);
 
+    // Search panel (hidden by default, on the right)
+    searchPanel_ = new QWidget(this);
+    auto* searchLayout = new QVBoxLayout(searchPanel_);
+    searchLayout->setContentsMargins(4, 4, 4, 4);
+
+    searchEdit_ = new QLineEdit(this);
+    searchEdit_->setPlaceholderText(tr("Search files..."));
+    searchLayout->addWidget(searchEdit_);
+
+    searchResults_ = new QListWidget(this);
+    searchResults_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    searchLayout->addWidget(searchResults_);
+
+    searchPanel_->hide();
+    mainSplitter_->addWidget(searchPanel_);
+
+    mainSplitter_->setStretchFactor(2, 1);
+
     topLayout->addWidget(mainSplitter_);
 
     centralSplitter->addWidget(topWidget);
@@ -180,6 +211,7 @@ void MainWindow::connectSignals() {
     connect(actVerify_, &QAction::triggered, this, &MainWindow::verifyArchive);
     connect(actStats_, &QAction::triggered, this, &MainWindow::showStatistics);
     connect(actProperties_, &QAction::triggered, this, &MainWindow::showProperties);
+    connect(actSearch_, &QAction::triggered, this, &MainWindow::toggleSearchPanel);
 
     // Tree/List interaction
     connect(folderTree_, &QTreeView::clicked, this, &MainWindow::onTreeClicked);
@@ -190,6 +222,13 @@ void MainWindow::connectSignals() {
 
     // Address bar
     connect(addressEdit_, &QLineEdit::returnPressed, this, &MainWindow::onAddressReturnPressed);
+
+    // Search
+    connect(searchEdit_, &QLineEdit::textChanged, this, &MainWindow::onSearchTextChanged);
+    connect(searchResults_, &QListWidget::itemClicked, this, [this](QListWidgetItem* item) {
+        int row = searchResults_->row(item);
+        onSearchResultClicked(row);
+    });
 
     // Controller signals
     connect(controller_, &AppController::archiveOpened, this, &MainWindow::onArchiveOpened);
@@ -226,6 +265,9 @@ void MainWindow::onArchiveOpened() {
 
     currentPath_.clear();
     addressEdit_->clear();
+    searchEdit_->clear();
+    searchResults_->clear();
+    searchResultPaths_.clear();
 
     // Expand root in tree
     folderTree_->expandToDepth(0);
@@ -481,4 +523,162 @@ ArchiveTreeNode* MainWindow::findNode(const QString& path) {
         if (!current) return nullptr;
     }
     return current;
+}
+
+void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    }
+}
+
+void MainWindow::dragMoveEvent(QDragMoveEvent* event) {
+    if (event->mimeData()->hasUrls()) {
+        event->acceptProposedAction();
+    }
+}
+
+void MainWindow::dropEvent(QDropEvent* event) {
+    const auto urls = event->mimeData()->urls();
+    if (!urls.isEmpty()) {
+        handleDroppedUrls(urls);
+    }
+    event->acceptProposedAction();
+}
+
+void MainWindow::handleDroppedUrls(const QList<QUrl>& urls) {
+    for (const auto& url : urls) {
+        if (!url.isLocalFile()) continue;
+
+        QString localPath = url.toLocalFile();
+        QFileInfo fi(localPath);
+
+        if (fi.isDir()) {
+            if (controller_->isArchiveOpen()) {
+                controller_->addFolder(localPath, currentPath_);
+            } else {
+                handleCreateFromFolder(localPath);
+            }
+        } else if (fi.isFile() && localPath.endsWith(QStringLiteral(".lmdb"), Qt::CaseInsensitive)) {
+            if (controller_->isArchiveOpen()) {
+                int ret = QMessageBox::question(this, tr("Open Archive"),
+                    tr("Close current archive and open \"%1\"?").arg(fi.fileName()),
+                    QMessageBox::Yes | QMessageBox::No);
+                if (ret == QMessageBox::Yes) {
+                    controller_->closeArchive();
+                    controller_->openArchive(localPath);
+                }
+            } else {
+                controller_->openArchive(localPath);
+            }
+        } else if (fi.isFile() && controller_->isArchiveOpen()) {
+            QString destPath = currentPath_.isEmpty()
+                ? fi.fileName()
+                : currentPath_ + QLatin1Char('/') + fi.fileName();
+            controller_->addFile(localPath, destPath);
+        }
+    }
+}
+
+void MainWindow::handleCreateFromFolder(const QString& folderPath) {
+    QFileInfo fi(folderPath);
+    if (!fi.isDir()) return;
+
+    QString defaultName = fi.fileName() + QStringLiteral(".lmdb");
+
+    QString archivePath = QFileDialog::getSaveFileName(this,
+        tr("Create LMDB Archive"),
+        defaultName,
+        tr("LMDB Archives (*.lmdb)"));
+
+    if (archivePath.isEmpty()) return;
+
+    if (!archivePath.endsWith(QStringLiteral(".lmdb"), Qt::CaseInsensitive))
+        archivePath += QStringLiteral(".lmdb");
+
+    ProgressDialog dlg(tr("Creating Archive"), this);
+    dlg.show();
+
+    controller_->createArchive(folderPath, archivePath);
+
+    dlg.setFinished(true, {});
+    dlg.exec();
+}
+
+void MainWindow::toggleSearchPanel() {
+    if (searchPanel_->isVisible()) {
+        searchPanel_->hide();
+        actSearch_->setChecked(false);
+    } else {
+        searchPanel_->show();
+        actSearch_->setChecked(true);
+        searchEdit_->setFocus();
+    }
+}
+
+void MainWindow::onSearchTextChanged(const QString& text) {
+    performSearch(text);
+}
+
+void MainWindow::performSearch(const QString& text) {
+    searchResults_->clear();
+    searchResultPaths_.clear();
+
+    if (text.isEmpty() || !controller_->isArchiveOpen()) return;
+
+    QString lowerText = text.toLower();
+
+    const auto& entries = controller_->archive()->entries();
+    for (const auto& e : entries) {
+        // Check if filename (not path) contains the search text
+        QString name = e.relative_path.mid(e.relative_path.lastIndexOf(QLatin1Char('/')) + 1);
+        if (name.toLower().contains(lowerText)) {
+            searchResults_->addItem(e.relative_path);
+            searchResultPaths_.append(e.relative_path);
+        }
+    }
+}
+
+void MainWindow::onSearchResultClicked(int row) {
+    if (row < 0 || row >= searchResultPaths_.size()) return;
+    navigateToEntry(searchResultPaths_[row]);
+}
+
+void MainWindow::navigateToEntry(const QString& fullPath) {
+    // Navigate to parent directory in tree and select the entry
+    int lastSlash = fullPath.lastIndexOf(QLatin1Char('/'));
+    QString parentPath = (lastSlash > 0) ? fullPath.left(lastSlash) : QString();
+
+    // Navigate to parent directory
+    navigateToPath(parentPath);
+
+    // Find and select the entry in the table
+    QString fileName = fullPath.mid(lastSlash + 1);
+    for (int i = 0; i < entryModel_->rowCount({}); ++i) {
+        if (entryModel_->name(i) == fileName) {
+            entryTable_->selectRow(i);
+            entryTable_->scrollTo(entryModel_->index(i, 0));
+            break;
+        }
+    }
+
+    // Expand tree nodes to show the path
+    if (!parentPath.isEmpty()) {
+        auto parts = PathUtil::splitArchivePath(parentPath);
+        QModelIndex idx;
+        ArchiveTreeNode* node = controller_->treeRoot();
+        for (const auto& part : parts) {
+            node = node->findChild(part);
+            if (!node) break;
+            // Find the model index for this child
+            for (int r = 0; r < folderModel_->rowCount(idx); ++r) {
+                QModelIndex childIdx = folderModel_->index(r, 0, idx);
+                auto* childNode = folderModel_->nodeFromIndex(childIdx);
+                if (childNode && childNode->name() == part) {
+                    folderTree_->expand(childIdx);
+                    idx = childIdx;
+                    break;
+                }
+            }
+        }
+    }
 }

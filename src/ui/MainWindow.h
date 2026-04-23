@@ -12,6 +12,8 @@ class QLabel;
 class QLineEdit;
 class QToolBar;
 class QAction;
+class QListWidget;
+class QUrl;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -21,6 +23,12 @@ public:
 
     void updateTitle();
     void updateStatusBar();
+    void handleCreateFromFolder(const QString& folderPath);
+
+protected:
+    void dragEnterEvent(QDragEnterEvent* event) override;
+    void dragMoveEvent(QDragMoveEvent* event) override;
+    void dropEvent(QDropEvent* event) override;
 
 public slots:
     void onArchiveOpened();
@@ -48,6 +56,9 @@ private slots:
     void onCustomContextMenu(const QPoint& point);
     void onAddressReturnPressed();
     void navigateToPath(const QString& path);
+    void toggleSearchPanel();
+    void onSearchTextChanged(const QString& text);
+    void onSearchResultClicked(int row);
 
 private:
     void setupMenus();
@@ -59,6 +70,9 @@ private:
     void updateEntryView(const QString& dirPath);
     void collectSelectedPaths(QStringList& paths);
     ArchiveTreeNode* findNode(const QString& path);
+    void handleDroppedUrls(const QList<QUrl>& urls);
+    void performSearch(const QString& text);
+    void navigateToEntry(const QString& fullPath);
 
     AppController* controller_;
 
@@ -70,6 +84,12 @@ private:
     QTableView* entryTable_ = nullptr;
     PreviewPane* previewPane_ = nullptr;
     QLabel* statusLabel_ = nullptr;
+
+    // Search panel
+    QWidget* searchPanel_ = nullptr;
+    QLineEdit* searchEdit_ = nullptr;
+    QListWidget* searchResults_ = nullptr;
+    QStringList searchResultPaths_;
 
     // Models
     FolderTreeModel* folderModel_ = nullptr;
@@ -91,4 +111,5 @@ private:
     QAction* actProperties_ = nullptr;
     QAction* actStats_ = nullptr;
     QAction* actClose_ = nullptr;
+    QAction* actSearch_ = nullptr;
 };

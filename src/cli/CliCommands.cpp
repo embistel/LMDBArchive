@@ -5,6 +5,7 @@
 #include <QTextStream>
 #include <QFile>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <iostream>
 #include <spdlog/spdlog.h>
 
@@ -248,6 +249,48 @@ int CliCommands::cat(LmdbArchive& archive, const QStringList& args) {
     return 0;
 }
 
+int CliCommands::search(LmdbArchive& archive, const QStringList& args) {
+    if (args.size() < 2) {
+        err << "Usage: lmdb-archive search <archive> <pattern>\n";
+        return 1;
+    }
+
+    QString archivePath = args[0];
+    QString pattern = args[1];
+
+    if (!archive.open(archivePath, OpenMode::ReadOnly)) {
+        err << "Error: " << archive.lastError() << "\n";
+        return 1;
+    }
+
+    auto entries = archive.entries();
+    int count = 0;
+
+    bool hasWildcard = pattern.contains(QLatin1Char('*')) || pattern.contains(QLatin1Char('?'));
+
+    for (const auto& e : entries) {
+        bool match = false;
+        if (hasWildcard) {
+            // Convert simple wildcard to regex: * → .*, ? → .
+            QString regexStr = QRegularExpression::escape(pattern);
+            regexStr.replace(QStringLiteral("\\*"), QStringLiteral(".*"));
+            regexStr.replace(QStringLiteral("\\?"), QStringLiteral("."));
+            QRegularExpression re(regexStr, QRegularExpression::CaseInsensitiveOption);
+            match = re.match(e.relative_path).hasMatch();
+        } else {
+            match = e.relative_path.contains(pattern, Qt::CaseInsensitive);
+        }
+
+        if (match) {
+            out << e.relative_path << "\t" << e.file_size << "\n";
+            ++count;
+        }
+    }
+
+    out << "Found: " << count << " match(es)\n";
+    return 0;
+}
+
 void CliCommands::printUsage() {
     out << "LMDB Archive Tool v1.0.0\n\n";
     out << "Usage: lmdb-archive <command> [args...]\n\n";
@@ -255,6 +298,7 @@ void CliCommands::printUsage() {
     out << "  create  <folder> <archive>           Create archive from folder\n";
     out << "  extract <archive> <output_folder>    Extract archive to folder\n";
     out << "  list    <archive> [prefix]           List archive contents\n";
+    out << "  search  <archive> <pattern>          Search files by name pattern\n";
     out << "  verify  <archive>                    Verify archive integrity\n";
     out << "  stat    <archive>                    Show archive statistics\n";
     out << "  add     <archive> <file_or_dir> [prefix]  Add files to archive\n";

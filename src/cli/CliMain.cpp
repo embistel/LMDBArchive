@@ -38,6 +38,8 @@ int main(int argc, char* argv[]) {
         return CliCommands::del(archive, cmdArgs);
     if (command == QLatin1String("cat"))
         return CliCommands::cat(archive, cmdArgs);
+    if (command == QLatin1String("search"))
+        return CliCommands::search(archive, cmdArgs);
 
     CliCommands::printUsage();
     return 1;

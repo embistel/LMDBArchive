@@ -1,0 +1,18 @@
+Windows Registry Editor Version 5.00
+
+; LMDBArchive Shell Integration
+; Run install_shell.bat instead of this file directly.
+; The .bat script generates correct paths for your installation.
+
+; === .lmdb file association ===
+[HKEY_CLASSES_ROOT\.lmdb]
+@="LMDBArchive"
+"PerceivedType"="Archive"
+
+[HKEY_CLASSES_ROOT\LMDBArchive]
+@="LMDB Archive File"
+"FriendlyTypeName"="LMDB Archive"
+
+; === "Archive to LMDB" context menu on directories ===
+[HKEY_CLASSES_ROOT\Directory\shell\ArchiveToLMDB]
+@="Archive to LMDB"
