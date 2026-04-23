@@ -32,8 +32,8 @@ MainWindow::MainWindow(AppController* controller, QWidget* parent)
     folderModel_ = new FolderTreeModel(this);
     entryModel_ = new EntryTableModel(this);
 
-    setupMenus();
     setupToolbar();
+    setupMenus();
     setupCentralWidget();
     setupStatusBar();
     connectSignals();
